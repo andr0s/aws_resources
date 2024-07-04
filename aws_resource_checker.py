@@ -46,6 +46,12 @@ def read_aws_credentials(config_file_path="~/.aws/config"):
     }
 
 
+def get_all_regions():
+    ec2_client = boto3.client('ec2')
+    regions = [region['RegionName'] for region in ec2_client.describe_regions()['Regions']]
+    return regions
+
+
 # Function to check EC2 resources
 def check_ec2_resources():
     ec2_client = boto3.client('ec2')
@@ -897,23 +903,23 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--hide-empty", action="store_true", help="Hide empty resources")
 args = parser.parse_args()
 
-# Read AWS credentials
-aws_credentials = read_aws_credentials()
 
-
-os.environ['AWS_DEFAULT_REGION'] = aws_credentials['region']
-os.environ['AWS_ACCESS_KEY_ID'] = aws_credentials['access_key']
-os.environ['AWS_SECRET_ACCESS_KEY'] = aws_credentials['secret_key']
-
-
-glob_attrs = list(globals().keys())
-for glob_attr in glob_attrs:
-    attr_value = globals()[glob_attr]
-    if not callable(attr_value) or not glob_attr.startswith('check_'):
-        continue
-    func_name = glob_attr[len('check_'):].replace('_resources', '')
-    print(f'{TextColors.BOLD}# {func_name.upper()}{TextColors.ENDC}')
-    try:
-        attr_value()
-    except Exception as e:
-        print(f'{TextColors.FAIL}{str(e)}{TextColors.ENDC}')
+ # Main execution loop
+regions = get_all_regions()
+for region in regions:
+    print(f"\n{TextColors.BOLD}Checking resources in {region}{TextColors.ENDC}")
+    
+    # Set the region for this iteration
+    boto3.setup_default_session(region_name=region)
+     
+    glob_attrs = list(globals().keys())
+    for glob_attr in glob_attrs:
+        attr_value = globals()[glob_attr]
+        if not callable(attr_value) or not glob_attr.startswith('check_'):
+            continue
+        func_name = glob_attr[len('check_'):].replace('_resources', '')
+        print(f'{TextColors.BOLD}# {func_name.upper()} in {region}{TextColors.ENDC}')
+        try:
+            attr_value()
+        except Exception as e:
+            print(f'{TextColors.FAIL}{str(e)}{TextColors.ENDC}')
